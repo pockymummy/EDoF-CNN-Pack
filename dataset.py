@@ -16,7 +16,7 @@ from utils_files.automatic_brightness_and_contrast import automatic_brightness_a
 
 class Dataset(Dataset):
     def __init__(self, type, transform, dataset, Z, fold):
-        self.X, self.Y = pickle.load(open(f'dataset\\data_{dataset}.pickle', 'rb'))[fold][type]
+        self.X, self.Y = pickle.load(open(f'dataset/data_{dataset}.pickle', 'rb'))[fold][type]
         self.transform = transform
         self.Z = Z
     def __getitem__(self, i):
