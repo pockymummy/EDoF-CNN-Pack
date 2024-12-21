@@ -119,7 +119,12 @@ class Dataset_folder(Dataset):
         return len(self.X)
 
 
-
+class MyOneChannel():
+    def __init__(self,chan):
+        self.chan = chan
+    def __call__(self,image):
+        extract_image = image[:,:,self.chan]
+        return extract_image
 
 
 aug_transforms = transforms.Compose([
@@ -130,6 +135,25 @@ aug_transforms = transforms.Compose([
     transforms.ToTensor(),
     # vgg normalization
     # transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+])
+
+aug_transforms_red = transforms.Compose([
+    MyOneChannel(0),
+    transforms.ToPILImage(),
+    transforms.Resize((512, 512)),
+    transforms.ToTensor(),
+])
+aug_transforms_green = transforms.Compose([
+    MyOneChannel(1),
+    transforms.ToPILImage(),
+    transforms.Resize((512, 512)),
+    transforms.ToTensor(),
+])
+aug_transforms_blue = transforms.Compose([
+    MyOneChannel(2),
+    transforms.ToPILImage(),
+    transforms.Resize((512, 512)),
+    transforms.ToTensor(),
 ])
 
 val_transforms = transforms.Compose([

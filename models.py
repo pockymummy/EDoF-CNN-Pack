@@ -12,7 +12,7 @@ from utils import ConvLayer, ResidualLayer, DeconvLayer
 from einops import rearrange
 from utils_files import pytorch_ssim
 import kornia.losses
-
+from layers01 import Conv2D, PackLayerConv3d, UnpackLayerConv3d
 
 mse = nn.MSELoss()
 mae = nn.L1Loss()
@@ -304,7 +304,97 @@ class EDOF_CNN_pairwise(nn.Module):
         return Dec
     
     def loss(self, Yhat, Y):
+        return mse(Yhat, Y)
+
+# Created by Thanawat Tangpornpisit
+class EDOF_CNN_pack(nn.Module):    
+    def __init__(self):        
+        super(EDOF_CNN_pack, self).__init__()
+
+        self.encoder_0 = nn.Sequential(
+            Conv2D(1, 32, 3, 1)
+        )
+        self.encoder_1 = nn.Sequential(
+            Conv2D(32, 32, 3, 1),
+            PackLayerConv3d(32, 3),
+        )
+        self.encoder_2 = nn.Sequential(
+            Conv2D(32, 64, 3, 1),
+            PackLayerConv3d(64, 3)
+        )
+        self.unpack_1 = UnpackLayerConv3d(64, 64, 3)
+        self.iconv_1 = Conv2D(64 + 32, 64, 3, 1)
+
+        self.unpack_2 = UnpackLayerConv3d(64, 32, 3)
+        self.iconv_2 = Conv2D(64, 32, 3, 1)
+ 
+        self.decoder_3 = nn.Sequential(
+            ConvLayer(32, 16, 3, 1, activation='relu'),
+            ConvLayer(16, 1, 1, 1, activation='linear')
+        )
+        
+    def forward(self, XX):
+        encoder_0 = [self.encoder_0(X) for X in XX]
+        encoder_1 = [self.encoder_1(X) for X in encoder_0]
+        encoder_2 = [self.encoder_2(X) for X in encoder_1]
+        input_max, max_indices= torch.min(torch.stack(encoder_2),dim=0,keepdim=False)
+        skip1, _ = torch.min(torch.stack(encoder_1),dim=0,keepdim=False)
+        skip2, _ = torch.min(torch.stack(encoder_0),dim=0,keepdim=False)
+
+        unpack_1 = self.unpack_1(input_max)
+        concat_1 = torch.cat((unpack_1, skip1), 1)
+        iconv_1 = self.iconv_1(concat_1)
+
+        unpack_2 = self.unpack_2(iconv_1)
+        concat_2 = torch.cat((unpack_2, skip2), 1)
+        iconv_2 = self.iconv_2(concat_2)
+
+        decoder_3 = self.decoder_3(iconv_2)
+
+        return decoder_3
+    
+    def loss(self, Yhat, Y):
         return mse(Yhat, Y) 
+    
+# Created by Thanawat Tangpornpisit
+class EDOF_CNN_pack_rgb(nn.Module):    
+    def __init__(self, modelR, modelG, modelB):        
+        super(EDOF_CNN_pack_rgb, self).__init__()
+        self.modelR = modelR
+        self.modelG = modelG
+        self.modelB = modelB
+        
+    def forward(self, XX):
+        XX_red = [X[:,[0],:,:] for X in XX]
+        XX_green = [X[:,[1],:,:] for X in XX]
+        XX_blue = [X[:,[2],:,:] for X in XX]
+        def process(model,XX):
+            encoder_0 = [model.encoder_0(X) for X in XX]
+            encoder_1 = [model.encoder_1(X) for X in encoder_0]
+            encoder_2 = [model.encoder_2(X) for X in encoder_1]
+            input_max, max_indices= torch.min(torch.stack(encoder_2),dim=0,keepdim=False)
+            skip1, _ = torch.min(torch.stack(encoder_1),dim=0,keepdim=False)
+            skip2, _ = torch.min(torch.stack(encoder_0),dim=0,keepdim=False)
+
+            unpack_1 = model.unpack_1(input_max)
+            concat_1 = torch.cat((unpack_1, skip1), 1)
+            iconv_1 = model.iconv_1(concat_1)
+
+            unpack_2 = model.unpack_2(iconv_1)
+            concat_2 = torch.cat((unpack_2, skip2), 1)
+            iconv_2 = model.iconv_2(concat_2)
+
+            decoder_3 = model.decoder_3(iconv_2)
+
+            return decoder_3
+        decoded_red = process(self.modelR,XX_red)
+        decoded_green = process(self.modelG,XX_green)
+        decoded_blue = process(self.modelB,XX_blue)
+        stacked = torch.cat((decoded_red,decoded_green,decoded_blue),1)
+        return stacked
+    
+    def loss(self, Yhat, Y):
+        return mse(Yhat, Y)
 
 
 
